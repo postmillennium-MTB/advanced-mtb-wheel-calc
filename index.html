@@ -1,317 +1,710 @@
-import { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rear Hub Analysis Tool - Elastic vs Rigid Mode Matrix</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#060d18] text-[#e2e8f0]">
+  <div id="root"></div>
 
-const HUBS = [
-  { id:"r135", name:"SRC 135/142 Rear",  short:"135/142",  OLD:142, type:"rear",  d_ds:17.5, d_nds:34.2, pcd_ds:57, pcd_nds:60, ratio:51.6, K_lat:86.5,  F_lat:203,  F_rad:1094 },
-  { id:"r148", name:"SRC 148x12 Rear",   short:"148x12",   OLD:148, type:"rear",  d_ds:22.7, d_nds:35.8, pcd_ds:57, pcd_nds:60, ratio:63.9, K_lat:99.5,  F_lat:277,  F_rad:1354 },
-  { id:"r157", name:"SRC 157x12 Rear",   short:"157x12",   OLD:157, type:"rear",  d_ds:28.0, d_nds:35.0, pcd_ds:57, pcd_nds:60, ratio:80.4, K_lat:108.3, F_lat:388,  F_rad:1702 },
-  { id:"r177", name:"SRC 177x12 Rear",   short:"177x12",   OLD:177, type:"rear",  d_ds:37.1, d_nds:44.6, pcd_ds:57, pcd_nds:60, ratio:83.7, K_lat:153.8, F_lat:454,  F_rad:1771 },
-  { id:"r197", name:"SRC 197x12 Rear",   short:"197x12",   OLD:197, type:"rear",  d_ds:48.0, d_nds:53.0, pcd_ds:57, pcd_nds:60, ratio:91.1, K_lat:206.0, F_lat:560,  F_rad:1924 },
-  { id:"f100", name:"SRC 100/110 Front", short:"100/110F", OLD:110, type:"front", d_ds:35.5, d_nds:24.7, pcd_ds:60, pcd_nds:58, ratio:143,  K_lat:106.7, F_lat:469,  F_rad:2118 },
-  { id:"f110", name:"SRC 110x15 Front",  short:"110x15F",  OLD:110, type:"front", d_ds:40.2, d_nds:29.3, pcd_ds:60, pcd_nds:58, ratio:136,  K_lat:127.3, F_lat:496,  F_rad:2118 },
-  { id:"f150", name:"SRC 150x15 Front",  short:"150x15F",  OLD:150, type:"front", d_ds:58.6, d_nds:49.8, pcd_ds:60, pcd_nds:58, ratio:117,  K_lat:228.7, F_lat:621,  F_rad:2114 },
-];
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } = Recharts;
 
-const rCol = (r, type) => {
-  if (type === "front") { if(r<=112)return"#22c55e"; if(r<=125)return"#84cc16"; if(r<=138)return"#eab308"; return"#f97316"; }
-  if(r>=90)return"#22c55e"; if(r>=80)return"#84cc16"; if(r>=70)return"#eab308"; if(r>=60)return"#f97316"; return"#ef4444";
-};
+    const WHEEL_SIZES = {
+      '29"':   { erd: 600, label: '29" ISO 622' },
+      '27.5"': { erd: 559, label: '27.5" ISO 584' },
+      '26"':   { erd: 534, label: '26" ISO 559' },
+    };
 
-const grad = (v, max) => {
-  const p = ["#ef4444","#f97316","#eab308","#84cc16","#22c55e"];
-  return p[Math.min(Math.floor((v/max)*p.length), p.length-1)];
-};
+    const kgf_to_N = 9.80665;
 
-function HubCard({ hub }) {
-  const SC=1.12, CX=136, AY=52, FH=22;
-  const dx=CX+hub.d_ds*SC, nx=CX-hub.d_nds*SC;
-  const rx=CX+(hub.OLD/2)*SC, lx=CX-(hub.OLD/2)*SC;
-  const rc=rCol(hub.ratio,hub.type);
-  const gB=`b${hub.id}`, gA=`a${hub.id}`;
-  return (
-    <div style={{background:"#0b1826",border:"1px solid #1a3050",borderRadius:3,padding:"8px 4px 6px",display:"flex",flexDirection:"column"}}>
-      <div style={{fontFamily:"monospace",fontSize:9,color:"#5a80a0",textAlign:"center",letterSpacing:1,marginBottom:3,textTransform:"uppercase"}}>{hub.name}</div>
-      <svg width={272} height={128} style={{display:"block",margin:"0 auto",overflow:"visible"}}>
-        <defs>
-          <linearGradient id={gB} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#1d4ed8"/><stop offset="50%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#1d4ed8"/></linearGradient>
-          <linearGradient id={gA} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#92400e"/><stop offset="50%" stopColor="#fbbf24"/><stop offset="100%" stopColor="#92400e"/></linearGradient>
-        </defs>
-        <line x1={lx} y1={AY-FH-11} x2={rx} y2={AY-FH-11} stroke="#1a3050" strokeWidth={1}/>
-        <line x1={lx} y1={AY-FH-14} x2={lx} y2={AY-FH-8} stroke="#1a3050" strokeWidth={1}/>
-        <line x1={rx} y1={AY-FH-14} x2={rx} y2={AY-FH-8} stroke="#1a3050" strokeWidth={1}/>
-        <text x={CX} y={AY-FH-13} textAnchor="middle" fill="#253a50" fontSize={8} fontFamily="monospace">OLD {hub.OLD}mm</text>
-        <line x1={dx} y1={AY-hub.pcd_ds*0.18} x2={CX} y2={7} stroke="#f59e0b" strokeWidth={0.8} opacity={0.28}/>
-        <line x1={nx} y1={AY-hub.pcd_nds*0.18} x2={CX} y2={7} stroke="#3b82f6" strokeWidth={0.8} opacity={0.28}/>
-        <circle cx={CX} cy={7} r={3} fill="none" stroke="#1a3050" strokeWidth={1}/>
-        <text x={CX+6} y={10} fill="#1a3050" fontSize={6.5} fontFamily="monospace">RIM</text>
-        <line x1={lx-5} y1={AY} x2={rx+5} y2={AY} stroke="#1a3050" strokeWidth={2}/>
-        <rect x={nx} y={AY-5} width={dx-nx} height={10} fill="#0a1620" stroke="#1a3050" strokeWidth={1}/>
-        <rect x={lx-6} y={AY-14} width={6} height={28} fill="#142030" rx={1}/>
-        <rect x={rx}   y={AY-14} width={6} height={28} fill="#142030" rx={1}/>
-        <rect x={nx-4} y={AY-FH} width={8} height={FH*2} fill={`url(#${gB})`} rx={1}/>
-        <rect x={dx-4} y={AY-FH} width={8} height={FH*2} fill={`url(#${gA})`} rx={1}/>
-        <text x={nx} y={AY-FH-4} textAnchor="middle" fill="#60a5fa" fontSize={7} fontFamily="monospace">o{hub.pcd_nds}</text>
-        <text x={dx} y={AY-FH-4} textAnchor="middle" fill="#fbbf24" fontSize={7} fontFamily="monospace">o{hub.pcd_ds}</text>
-        <line x1={CX} y1={AY-FH} x2={CX} y2={AY+FH+18} stroke="#1a3050" strokeWidth={1} strokeDasharray="3,2"/>
-        <line x1={nx} y1={AY+FH+5} x2={CX} y2={AY+FH+5} stroke="#3b82f6" strokeWidth={1}/>
-        <line x1={nx} y1={AY+FH+2} x2={nx} y2={AY+FH+8} stroke="#3b82f6" strokeWidth={1}/>
-        <line x1={CX} y1={AY+FH+2} x2={CX} y2={AY+FH+8} stroke="#3b82f6" strokeWidth={1}/>
-        <text x={(nx+CX)/2} y={AY+FH+18} textAnchor="middle" fill="#60a5fa" fontSize={9} fontFamily="monospace">{hub.type==="rear"?"NDS":"L"} {hub.d_nds}</text>
-        <line x1={CX} y1={AY+FH+5} x2={dx} y2={AY+FH+5} stroke="#f59e0b" strokeWidth={1}/>
-        <line x1={dx} y1={AY+FH+2} x2={dx} y2={AY+FH+8} stroke="#f59e0b" strokeWidth={1}/>
-        <text x={(CX+dx)/2} y={AY+FH+18} textAnchor="middle" fill="#fbbf24" fontSize={9} fontFamily="monospace">{hub.type==="rear"?"DS":"R"} {hub.d_ds}</text>
-        <text x={CX} y={125} textAnchor="middle" fill="#253a50" fontSize={7} fontFamily="monospace">F-F:{(hub.d_ds+hub.d_nds).toFixed(1)}mm</text>
-      </svg>
-      <div style={{padding:"4px 8px 2px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-          <span style={{fontFamily:"monospace",fontSize:8,color:"#253a50",letterSpacing:1}}>{hub.type==="rear"?"NDS/DS":"L/R"} TENSION</span>
-          <span style={{fontFamily:"monospace",fontSize:10,color:rc,fontWeight:"bold"}}>{hub.ratio}%</span>
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LINEAR ALGEBRA UTILITIES
+    // ═══════════════════════════════════════════════════════════════════════════
+    function zeros(r, c) { return Array.from({ length: r }, () => Array(c).fill(0)); }
+    function transpose(A) { return A[0].map((_, j) => A.map(row => row[j])); }
+    function matMul(A, B) {
+      const r = A.length, n = B.length, c = B[0].length;
+      const out = zeros(r, c);
+      for (let i = 0; i < r; i++) {
+        for (let k = 0; k < n; k++) {
+          if (A[i][k] === 0) continue;
+          for (let j = 0; j < c; j++) out[i][j] += A[i][k] * B[k][j];
+        }
+      }
+      return out;
+    }
+    function matVecMul(A, x) { return A.map(row => row.reduce((s, v, i) => s + v * x[i], 0)); }
+    function addInPlace(A, B, scale = 1) {
+      for (let i = 0; i < A.length; i++) {
+        for (let j = 0; j < A[0].length; j++) A[i][j] += scale * B[i][j];
+      }
+    }
+    function addMatrices(A, B) {
+      return A.map((row, i) => row.map((v, j) => v + B[i][j]));
+    }
+    
+    // Stable Gaussian Elimination with Partial Pivoting
+    function solveLinear(A, b) {
+      const n = A.length;
+      const M = A.map((row, i) => [...row, b[i]]);
+      for (let k = 0; k < n; k++) {
+        let piv = k;
+        for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[piv][k])) piv = i;
+        [M[k], M[piv]] = [M[piv], M[k]];
+        const div = M[k][k];
+        if (Math.abs(div) < 1e-14) continue; 
+        for (let j = k; j <= n; j++) M[k][j] /= div;
+        for (let i = 0; i < n; i++) {
+          if (i === k) continue;
+          const f = M[i][k];
+          for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j];
+        }
+      }
+      return M.map(row => row[n]);
+    }
+
+    function unit3() { return [[1,0,0],[0,1,0],[0,0,1]]; }
+    function outer3(a, b) { return a.map(ai => b.map(bj => ai * bj)); }
+    function subOuter(A, B) { return A.map((row,i) => row.map((v,j) => v - B[i][j])); }
+    function scaleMat(A, s) { return A.map(row => row.map(v => v * s)); }
+    function scaleOuter(a, b, s) { return outer3(a, b).map(row => row.map(v => v * s)); }
+    function addOuter(A, B) { return A.map((row,i) => row.map((v,j) => v + B[i][j])); }
+    function dot(a, b) { return a.reduce((s, v, i) => s + v * b[i], 0); }
+    function crossVec(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+    function norm(v) { return Math.sqrt(dot(v, v)); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // RIM SPECIFICATION DATABASE
+    // ═══════════════════════════════════════════════════════════════════════════
+    const RIM_SPECS = {
+      'alloy': {
+        name: 'Alloy (Standard)',
+        area: 1.5e-4,           // m² (typical alloy rim cross-section)
+        I_rad: 1.2e-8,          // m^4 (radial bending)
+        I_lat: 4.0e-9,          // m^4 (lateral bending, stiffer)
+        J_tor: 2.0e-10,         // m^4 (torsion constant)
+        I_warp: 5.0e-11,        // m^4 (warping constant)
+        y_0: 3.0e-3,            // m (shear center offset, 3mm)
+        E: 69e9,                // Pa (Young's modulus, aluminum)
+        G: 26e9,                // Pa (shear modulus)
+      },
+      'carbon': {
+        name: 'Carbon (High Modulus)',
+        area: 1.2e-4,           // m² (slightly thinner section possible)
+        I_rad: 1.6e-8,          // m^4 (stiffer radially)
+        I_lat: 5.5e-9,          // m^4 (stiffer laterally)
+        J_tor: 3.5e-10,         // m^4 (much stiffer in torsion)
+        I_warp: 8.0e-11,        // m^4 (higher warping resistance)
+        y_0: 2.5e-3,            // m (different geometry)
+        E: 120e9,               // Pa (Carbon is ~1.7x stiffer)
+        G: 45e9,                // Pa (shear modulus)
+      },
+      'dh': {
+        name: 'DH Rim (Heavy Duty)',
+        area: 2.0e-4,           // m² (beefier section)
+        I_rad: 2.0e-8,          // m^4 (much stiffer)
+        I_lat: 6.5e-9,          // m^4 (much stiffer)
+        J_tor: 4.0e-10,         // m^4 (high torsional stiffness)
+        I_warp: 1.0e-10,        // m^4 (high warping resistance)
+        y_0: 4.0e-3,            // m (wider flange geometry)
+        E: 69e9,                // Pa (alloy)
+        G: 26e9,                // Pa (shear modulus)
+      },
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PHYSICAL CLASSES
+    // ═══════════════════════════════════════════════════════════════════════════
+    class Rim {
+      constructor(radius, rimSpec) {
+        this.radius = radius;                    // m
+        this.area = rimSpec.area;
+        this.I_rad = rimSpec.I_rad;
+        this.I_lat = rimSpec.I_lat;
+        this.J_tor = rimSpec.J_tor;
+        this.I_warp = rimSpec.I_warp;
+        this.young_mod = rimSpec.E;
+        this.shear_mod = rimSpec.G;
+        this.sec_params = { y_0: rimSpec.y_0 };
+      }
+    }
+
+    class Hub {
+      constructor(diameter_nds, diameter_ds, width_nds, width_ds) {
+        this.diameter_nds = diameter_nds;       // m
+        this.diameter_ds = diameter_ds;         // m
+        this.width_nds = width_nds;             // m
+        this.width_ds = width_ds;               // m
+      }
+    }
+
+    class Spoke {
+      constructor(rim_pt, hub_pt, diameter, young_mod) {
+        this.EA = (Math.PI / 4) * (diameter ** 2) * young_mod;
+        this.tension = 0;
+        this.rim_pt = rim_pt;   // [R, θ, z]
+        this.hub_pt = hub_pt;   // [r, φ, z_hub]
+
+        // 3D spoke vector (cylindrical coordinates)
+        const du = hub_pt[2] - rim_pt[2];
+        const dv = (rim_pt[0] - hub_pt[0]) + hub_pt[0] * (1 - Math.cos(hub_pt[1] - rim_pt[1]));
+        const dw = hub_pt[0] * Math.sin(hub_pt[1] - rim_pt[1]);
+
+        this.length = Math.sqrt(du ** 2 + dv ** 2 + dw ** 2);
+        this.n = [du / this.length, dv / this.length, dw / this.length];
+        this.b = [rim_pt[2], 0, 0];  // rim offset from axis
+      }
+
+      calc_k(tension=true) {
+        const n = this.n;
+        const e3 = [0, 0, 1];
+        const K_e = this.EA / this.length;
+        const K_t = tension ? this.tension / this.length : 0;
+        
+        const k_f = addOuter(scaleOuter(n, n, K_e), scaleMat(subOuter(unit3(), outer3(n, n)), K_t));
+        const dFdphi = matVecMul(k_f, crossVec(e3, this.b));
+        const dTdphi = dot(crossVec(this.b, e3), matVecMul(k_f, crossVec(this.b, e3)));
+        
+        const k = zeros(4, 4);
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) k[i][j] = k_f[i][j];
+        for (let i = 0; i < 3; i++) {
+          k[i][3] = dFdphi[i];
+          k[3][i] = dFdphi[i];
+        }
+        k[3][3] = dTdphi;
+        return k;
+      }
+
+      calc_tension_change(d, a=0) {
+        if (d.length < 4) d = d.concat([0]);
+        const e3 = [0, 0, 1];
+        const un = [d[0], d[1], d[2]].map((v, i) => v + d[3] * crossVec(e3, this.b)[i]);
+        return (this.EA / this.length) * (a - dot(this.n, un));
+      }
+    }
+
+    class BicycleWheel {
+      constructor() {
+        this.spokes = [];
+        this.rim = null;
+        this.hub = null;
+      }
+
+      lace_cross(n_spokes, n_cross, diameter, young_mod, offsetMm=0) {
+        this.spokes = [];
+        const offset = offsetMm / 1000;  // Convert to meters
+        const n_half = n_spokes / 2;
+        
+        // DS side: flanges shift OUTWARD (positive z)
+        for (let s = 0; s < n_half; s++) {
+          const theta_rim = (2 * Math.PI / n_spokes) * (s * 2 + 1);
+          const s_dir = 2 * ((s + 1) % 2) - 1;
+          const rim_pt = [this.rim.radius, theta_rim, +offset];
+          const hub_pt = [this.hub.diameter_ds / 2, theta_rim + 2 * Math.PI / n_half * n_cross * s_dir, -this.hub.width_ds];
+          this.spokes.push(new Spoke(rim_pt, hub_pt, diameter, young_mod));
+        }
+
+        // NDS side: flanges shift INWARD (negative z)
+        for (let s = 0; s < n_half; s++) {
+          const theta_rim = (2 * Math.PI / n_spokes) * (s * 2);
+          const s_dir = 2 * ((s + 1) % 2) - 1;
+          const rim_pt = [this.rim.radius, theta_rim, -offset];
+          const hub_pt = [this.hub.diameter_nds / 2, theta_rim + 2 * Math.PI / n_half * n_cross * s_dir, this.hub.width_nds];
+          this.spokes.push(new Spoke(rim_pt, hub_pt, diameter, young_mod));
+        }
+      }
+
+      apply_tension(T_ds) {
+        const s_ds = this.spokes[0];
+        const s_nds = this.spokes[this.spokes.length / 2];
+        // Scale NDS tension to maintain radial balance
+        const T_nds = Math.abs(s_ds.n[0] / (s_nds.n[0] + 1e-12)) * T_ds;
+        for (let i = 0; i < this.spokes.length / 2; i++) this.spokes[i].tension = T_ds;
+        for (let i = this.spokes.length / 2; i < this.spokes.length; i++) this.spokes[i].tension = T_nds;
+      }
+    }
+
+    class ModeMatrix {
+      constructor(wheel, N=24) {
+        this.wheel = wheel;
+        this.n_modes = N;
+      }
+
+      B_theta(theta, comps=[0,1,2,3]) {
+        const thetaArr = Array.isArray(theta) ? theta : [theta];
+        const B = zeros(thetaArr.length * comps.length, 4 + 8 * this.n_modes);
+        for (let it = 0; it < thetaArr.length; it++) {
+          for (let ic = 0; ic < comps.length; ic++) B[comps.length * it + ic][comps[ic]] = 1;
+          for (let n = 1; n <= this.n_modes; n++) {
+            const c = Math.cos(n * thetaArr[it]);
+            const s = Math.sin(n * thetaArr[it]);
+            for (let ic = 0; ic < comps.length; ic++) {
+              const idx = comps[ic];
+              B[comps.length * it + ic][4 + 8 * (n - 1) + 2 * idx] = c;
+              B[comps.length * it + ic][4 + 8 * (n - 1) + 2 * idx + 1] = s;
+            }
+          }
+        }
+        return B;
+      }
+
+      K_rim_matl() {
+        const R = this.wheel.rim.radius;
+        const EA = this.wheel.rim.young_mod * this.wheel.rim.area;
+        const EI_rad = this.wheel.rim.young_mod * this.wheel.rim.I_rad;
+        const EI_lat = this.wheel.rim.young_mod * this.wheel.rim.I_lat;
+        const EIw = this.wheel.rim.young_mod * this.wheel.rim.I_warp;
+        const GJ = this.wheel.rim.shear_mod * this.wheel.rim.J_tor;
+        const y0 = this.wheel.rim.sec_params.y_0 || 0;
+        
+        const K = zeros(4 + 8 * this.n_modes, 4 + 8 * this.n_modes);
+        K[1][1] = 2 * Math.PI * EA / R;
+        K[3][3] = 2 * Math.PI * EI_lat / R;
+
+        for (let n = 1; n <= this.n_modes; n++) {
+          const i0 = 4 + (n - 1) * 8;
+          K[i0 + 2][i0 + 2] = EI_rad * Math.PI / R**3 * n**4 + EA * Math.PI / R * (1 + y0 / R * n**2)**2;
+          K[i0 + 3][i0 + 3] = K[i0 + 2][i0 + 2];
+          K[i0 + 4][i0 + 4] = EI_rad * Math.PI / R**3 * n**2 + EA * Math.PI / R * n**2 * (1 + y0 / R)**2;
+          K[i0 + 5][i0 + 5] = K[i0 + 4][i0 + 4];
+          const kvw = -EI_rad * Math.PI / R**3 * n**3 - EA * Math.PI * n / R * (1 + y0 / R * (1 + n**2) + (y0**2 / R**2) * n**2);
+          K[i0 + 2][i0 + 5] = kvw; K[i0 + 5][i0 + 2] = kvw;
+          K[i0 + 3][i0 + 4] = -kvw; K[i0 + 4][i0 + 3] = -kvw;
+          
+          K[i0 + 0][i0 + 0] = EI_lat * Math.PI / R**3 * n**4 + EIw * Math.PI / R**5 * n**4 + GJ * Math.PI / R**3 * n**2;
+          K[i0 + 1][i0 + 1] = K[i0 + 0][i0 + 0];
+          K[i0 + 0][i0 + 6] = -(EI_lat * Math.PI / R**2 * n**2 + EIw * Math.PI / R**4 * n**4 + GJ * Math.PI / R**2 * n**2);
+          K[i0 + 6][i0 + 0] = K[i0 + 0][i0 + 6];
+          K[i0 + 1][i0 + 7] = K[i0 + 0][i0 + 6]; K[i0 + 7][i0 + 1] = K[i0 + 0][i0 + 6];
+          K[i0 + 6][i0 + 6] = EI_lat * Math.PI / R + EIw * Math.PI / R**3 * n**4 + GJ * Math.PI / R * n**2;
+          K[i0 + 7][i0 + 7] = K[i0 + 6][i0 + 6];
+        }
+        return K;
+      }
+
+      K_spk(tension=true) {
+        const dim = 4 + 8 * this.n_modes;
+        const K = zeros(dim, dim);
+        for (const s of this.wheel.spokes) {
+          const B = this.B_theta(s.rim_pt[1]);
+          const contrib = matMul(transpose(B), matMul(s.calc_k(tension), B));
+          addInPlace(K, contrib, 1);
+        }
+        return K;
+      }
+
+      F_ext(theta, f) { return matVecMul(transpose(this.B_theta(theta)), f); }
+      rim_def_lat(theta, dm) { return matVecMul(this.B_theta(theta, [0]), dm); }
+      rim_def_rad(theta, dm) { return matVecMul(this.B_theta(theta, [1]), dm); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HIGH-LEVEL WHEEL BUILDER & CALCULATOR
+    // ═══════════════════════════════════════════════════════════════════════════
+    function buildWheel({ preset, wheelKey, offsetRim, tDS, nSpokes, rimType }) {
+      const rimOffsetMm = offsetRim ? 3.0 : 0.0;
+      const erd = WHEEL_SIZES[wheelKey].erd;
+      const rimSpec = RIM_SPECS[rimType];
+      
+      const rim = new Rim(erd / 2 / 1000, rimSpec);
+      const hub = new Hub(preset.hub_diameter_nds, preset.hub_diameter_ds, preset.d_nds / 1000, preset.d_ds / 1000);
+      
+      const wheel = new BicycleWheel();
+      wheel.rim = rim;
+      wheel.hub = hub;
+      wheel.lace_cross(nSpokes, 3, 1.8e-3, 200e9, rimOffsetMm);
+      wheel.apply_tension(tDS * kgf_to_N);
+      return wheel;
+    }
+
+    function calcWheel(wheel, nModes=24) {
+      const mm = new ModeMatrix(wheel, nModes);
+      const K_global = addMatrices(mm.K_rim_matl(), mm.K_spk(true));
+
+      // ══════════════════════════════════════════════════════════════════════
+      // ELASTIC SOLUTION: Apply 1 Newton test forces and solve
+      // ══════════════════════════════════════════════════════════════════════
+      const F_test = 1.0;  // 1 Newton
+      const F_lat_vec = mm.F_ext(0, [F_test, 0, 0, 0]);
+      const F_rad_vec = mm.F_ext(0, [0, F_test, 0, 0]);
+      
+      let d_lat, d_rad;
+      try {
+        d_lat = solveLinear(K_global, F_lat_vec);
+        d_rad = solveLinear(K_global, F_rad_vec);
+      } catch (e) {
+        console.warn('Matrix solve failed:', e);
+        return { error: true, K_lat: 0, K_rad: 0, F_lat_elastic: 0, F_rad_elastic: 0, F_lat_rigid: 0, ratio_pct: 0, symmetry_pct: 0, t_nds: 0, beta_ds: 0, beta_nds: 0, ftf: 0 };
+      }
+
+      const lat_def = mm.rim_def_lat(0, d_lat)[0];
+      const rad_def = mm.rim_def_rad(0, d_rad)[0];
+      
+      // Stiffness = Force / Deflection
+      const K_lat = lat_def !== 0 ? F_test / lat_def : 0;
+      const K_rad = rad_def !== 0 ? F_test / rad_def : 0;
+
+      // ══════════════════════════════════════════════════════════════════════
+      // DETENSION FORCE: For each spoke, compute F = T / (dT/dF)
+      // where dT/dF = rate of tension change per Newton of applied force
+      // ══════════════════════════════════════════════════════════════════════
+      const latT = wheel.spokes.map(s => s.calc_tension_change(matVecMul(mm.B_theta(s.rim_pt[1]), d_lat)));
+      const radT = wheel.spokes.map(s => s.calc_tension_change(matVecMul(mm.B_theta(s.rim_pt[1]), d_rad)));
+      
+      // Lateral: F_detension = T / |dT/dF|
+      const dT_dF_lat = latT.map((dT, i) => dT / F_test);
+      const F_lat_elastic_N = Math.min(...wheel.spokes.map((s, i) => 
+        Math.abs(dT_dF_lat[i]) > 1e-12 ? Math.abs(s.tension / dT_dF_lat[i]) : 1e12
+      ));
+      
+      // Radial: F_detension = T / |dT/dF|
+      const dT_dF_rad = radT.map((dT, i) => dT / F_test);
+      const F_rad_elastic_N = Math.min(...wheel.spokes.map((s, i) => 
+        Math.abs(dT_dF_rad[i]) > 1e-12 ? Math.abs(s.tension / dT_dF_rad[i]) : 1e12
+      ));
+
+      // ══════════════════════════════════════════════════════════════════════
+      // RIGID THEORY (Baseline for comparison)
+      // ══════════════════════════════════════════════════════════════════════
+      const s_ds = wheel.spokes[0];
+      const s_nds = wheel.spokes[wheel.spokes.length / 2];
+      const n_side = wheel.spokes.length / 2;
+      
+      const k_ds = s_ds.EA / s_ds.length;
+      const k_nds = s_nds.EA / s_nds.length;
+      const sin_ds = Math.abs(s_ds.n[0]);
+      const sin_nds = Math.abs(s_nds.n[0]);
+      
+      const K_rigid_lat = n_side * k_ds * (sin_ds ** 2) + n_side * k_nds * (sin_nds ** 2);
+      const def_rigid_lat = F_test / (K_rigid_lat + 1e-12);
+      const dT_rigid_lat = def_rigid_lat * k_nds * sin_nds;
+      const F_lat_rigid_N = Math.abs(s_nds.tension / (dT_rigid_lat + 1e-12));
+
+      return {
+        K_lat: +(K_lat / 1000).toFixed(1),
+        K_rad: +(K_rad / 1000).toFixed(0),
+        F_lat_elastic: +(F_lat_elastic_N / kgf_to_N).toFixed(1),
+        F_rad_elastic: +(F_rad_elastic_N / kgf_to_N).toFixed(1),
+        F_lat_rigid: +(F_lat_rigid_N / kgf_to_N).toFixed(1),
+        ratio_pct: +(s_nds.tension / (s_ds.tension + 1e-12) * 100).toFixed(1),
+        symmetry_pct: +(Math.min(s_ds.tension, s_nds.tension) / Math.max(s_ds.tension, s_nds.tension) * 100).toFixed(1),
+        t_nds: +(s_nds.tension / kgf_to_N).toFixed(1),
+        beta_ds: +(Math.asin(Math.max(-1, Math.min(1, sin_ds))) * 180 / Math.PI).toFixed(2),
+        beta_nds: +(Math.asin(Math.max(-1, Math.min(1, sin_nds))) * 180 / Math.PI).toFixed(2),
+        ftf: +((wheel.hub.width_ds + wheel.hub.width_nds) * 1000).toFixed(1),
+        n_modes: nModes,
+        error: false,
+      };
+    }
+
+    const PRESETS = [
+      { id:'r142', short:'142mm', name:'ISO 142×12 Rear', d_ds:20.1, d_nds:33.9, hub_diameter_ds:57.4e-3, hub_diameter_nds:57.4e-3 },
+      { id:'r148', short:'Boost', name:'Boost 148×12 Rear', d_ds:24.0, d_nds:36.3, hub_diameter_ds:57.4e-3, hub_diameter_nds:57.4e-3 },
+      { id:'r157', short:'Superboost', name:'Superboost 157×12', d_ds:28.8, d_nds:42.3, hub_diameter_ds:57.4e-3, hub_diameter_nds:57.4e-3 },
+      { id:'r157b', short:'Spank 150', name:'Spank 150/157', d_ds:29.5, d_nds:39.6, hub_diameter_ds:58.0e-3, hub_diameter_nds:58.0e-3 },
+    ];
+
+    function symCol(sym) {
+      if (sym >= 90) return '#22c55e';
+      if (sym >= 80) return '#84cc16';
+      if (sym >= 70) return '#eab308';
+      return '#ef4444';
+    }
+
+    function ChartTip({active, payload, label}) {
+      if (!active || !payload?.length) return null;
+      return (
+        <div className="bg-[#0b1826] border border-[#1e3050] p-2 font-mono text-[11px]">
+          <p className="text-[#5a80a0] mb-1 text-[10px]">{label}</p>
+          {payload.map((p,i) => <p key={i} style={{color:p.fill||'#94a3b8'}}>{p.name}: {p.value}</p>)}
         </div>
-        <div style={{background:"#060d18",height:5,borderRadius:1,position:"relative"}}>
-          <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${Math.min(hub.ratio,100)}%`,background:rc,borderRadius:1}}/>
-          <div style={{position:"absolute",left:"80%",top:-1,bottom:-1,width:1,background:"#1a3050"}}/>
+      );
+    }
+
+    function MetricCard({ label, value, unit, color, sub }) {
+      return (
+        <div className="bg-[#0a1620] border rounded p-3 text-center flex flex-col justify-center" style={{borderColor: `${color}33`}}>
+          <div className="font-mono text-[9px] text-[#2d4a6a] tracking-widest mb-1 leading-tight">{label}</div>
+          <div className="font-mono text-2xl font-light leading-none" style={{color}}>{value}</div>
+          <div className="font-mono text-[10px] text-[#2d4a6a] mt-1">{unit}</div>
+          {sub && <div className="font-mono text-[9px] mt-2 opacity-70" style={{color}}>{sub}</div>}
         </div>
-      </div>
-      <div style={{display:"flex",gap:3,padding:"3px 4px 1px",justifyContent:"center",flexWrap:"wrap"}}>
-        {[[`Fl:${(hub.F_lat/9.81).toFixed(0)}kgf`,"#f59e0b"],[`Fr:${(hub.F_rad/9.81).toFixed(0)}kgf`,"#a78bfa"],[`K:${hub.K_lat}N/mm`,"#38bdf8"]].map(([v,c])=>(
-          <div key={v} style={{background:"#0a1620",border:"1px solid #1a3050",borderRadius:2,padding:"2px 5px",fontFamily:"monospace",fontSize:7.5,color:c}}>{v}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
+      );
+    }
 
-const Tip = ({active,payload,label}) => {
-  if(!active||!payload?.length) return null;
-  return (
-    <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"8px 12px",fontFamily:"monospace",fontSize:11}}>
-      <p style={{color:"#5a80a0",margin:"0 0 4px",fontSize:10}}>{label}</p>
-      {payload.map((p,i)=><p key={i} style={{color:p.color||p.fill||"#94a3b8",margin:"2px 0"}}>{p.name}: {p.value}</p>)}
-    </div>
-  );
-};
-
-const SHdr = ({n,title,sub}) => (
-  <div style={{marginBottom:16,borderLeft:"3px solid #1e3a8a",paddingLeft:12}}>
-    <div style={{fontSize:8,color:"#1e3a8a",letterSpacing:3,marginBottom:2}}>SECTION {n}</div>
-    <div style={{fontSize:17,color:"#e2e8f0",letterSpacing:2,fontWeight:300}}>{title}</div>
-    <div style={{fontSize:9,color:"#253a50",marginTop:2}}>{sub}</div>
-  </div>
-);
-
-export default function HubAnalysis() {
-  const [tab, setTab] = useState("geo");
-  const rear=HUBS.filter(h=>h.type==="rear"), front=HUBS.filter(h=>h.type==="front");
-  const sData=HUBS.map(h=>({name:h.short,"Flat kgf":+(h.F_lat/9.81).toFixed(1),"Frad kgf":+(h.F_rad/9.81).toFixed(1),"Klat N/mm":h.K_lat}));
-  const tabs=[["geo","01  GEOMETRY"],["tension","02  TENSION"],["strength","03  STRENGTH"],["table","04  DATA"]];
-
-  return (
-    <div style={{background:"#060d18",minHeight:"100vh",fontFamily:"monospace",color:"#e2e8f0"}}>
-      <div style={{background:"linear-gradient(180deg,#0b1e36 0%,#060d18 100%)",borderBottom:"1px solid #1a3050",padding:"22px 28px 16px"}}>
-        <div style={{fontSize:9,letterSpacing:4,color:"#3b82f6",textTransform:"uppercase",marginBottom:6}}>Wheel Engineering · SRC Hub Family · DT Swiss TK540 29" · 32 Spokes 3x</div>
-        <h1 style={{fontSize:22,fontWeight:300,margin:0,letterSpacing:2,color:"#f1f5f9"}}>HUB STANDARDS &amp; WHEEL STRENGTH</h1>
-        <p style={{margin:"5px 0 12px",color:"#253a50",fontSize:10}}>Spoke tension symmetry · Flange geometry · Lateral &amp; radial failure loads · Mode Matrix Model (Ford 2018)</p>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-          {[["#3b82f6","NDS / Left flange"],["#f59e0b","DS / Right flange"],["#f59e0b","Flat lateral strength"],["#a78bfa","Frad radial strength — Ford primary metric"],["#38bdf8","Klat lateral stiffness"]].map(([c,l])=>(
-            <div key={l} style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:"#3a5a70"}}>
-              <div style={{width:9,height:9,background:c,borderRadius:1,flexShrink:0}}/>{l}
-            </div>
-          ))}
+    function Slider({ label, value, min, max, step=0.1, unit='mm', color='#60a5fa', onChange }) {
+      return (
+        <div className="mb-2">
+          <div className="flex justify-between mb-1">
+            <span className="font-mono text-[10px] text-[#5a80a0] tracking-widest">{label}</span>
+            <span className="font-mono text-[11px] font-bold" style={{color}}>{value}{unit}</span>
+          </div>
+          <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} className="w-full cursor-pointer" style={{accentColor: color}}/>
+          <div className="flex justify-between text-[8px] text-[#2d4a6a] mt-1">
+            <span>{min}{unit}</span><span>{max}{unit}</span>
+          </div>
         </div>
-      </div>
+      );
+    }
 
-      <div style={{display:"flex",borderBottom:"1px solid #1a3050",background:"#080f1a"}}>
-        {tabs.map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{background:"none",border:"none",cursor:"pointer",padding:"10px 18px",fontFamily:"monospace",fontSize:9,letterSpacing:1.5,textTransform:"uppercase",color:tab===id?"#60a5fa":"#253a50",borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent"}}>
-            {label}
-          </button>
-        ))}
-      </div>
+    function CrossSection({ hub_d_ds, hub_d_nds, width=320, rimOffsetMm=0 }) {
+      const H = 140;
+      const CX = width / 2;
+      const AY = 62;
+      const FH = 26;
+      const SC = Math.min(width / (hub_d_ds + hub_d_nds + 40), 1.6);
 
-      <div style={{maxWidth:1280,margin:"0 auto",padding:"24px 24px 48px"}}>
+      const dx = CX + hub_d_ds * SC;
+      const nx = CX - hub_d_nds * SC;
+      const lx = nx - 10;
+      const rx = dx + 10;
+      const rimVisualX = CX - rimOffsetMm * SC;
 
-        {tab==="geo" && (
-          <div>
-            <SHdr n="01" title="HUB GEOMETRY ATLAS" sub="Cross-sections at consistent scale 1.12 px/mm. Faint lines = spoke paths to rim. Dimensions in mm. PCD = pitch circle diameter of spoke holes."/>
-            <div style={{fontSize:8,color:"#253a50",letterSpacing:2,marginBottom:8}}>REAR HUBS — cassette (DS/amber) compresses center-to-flange, forcing NDS/DS tension imbalance</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:20}}>
-              {rear.map(h=><HubCard key={h.id} hub={h}/>)}
-            </div>
-            <div style={{fontSize:8,color:"#253a50",letterSpacing:2,marginBottom:8}}>FRONT HUBS — disc offset is minor vs cassette; both flanges far from centre, inherently symmetric</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:20}}>
-              {front.map(h=><HubCard key={h.id} hub={h}/>)}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-              {[["#ef4444","WORST GEOMETRY","SRC 135/142: DS flange is only 17.5mm from centre — squeezed by the cassette. NDS/DS = 51.6%. Radial strength = 111 kgf, barely 3x the static load of a 75 kg rider on the rear."],
-                ["#22c55e","BEST REAR GEOMETRY","SRC 197x12: d_DS = 48mm, d_NDS = 53mm. Only 5mm of asymmetry vs 13mm on the 148 hub. 91.1% tension balance. Wide axle pushes both flanges outboard, approaching front-hub symmetry."],
-                ["#3b82f6","FRONT HUB ADVANTAGE","No cassette constraint. Both flanges sit 25-59mm from centre. Even the narrowest 110mm front hub exceeds 215 kgf radial strength — nearly 2x the 148 rear at the same spoke tension."]
-              ].map(([c,h,b])=>(
-                <div key={h} style={{background:"#0b1826",border:"1px solid #1a3050",padding:"12px 14px",borderRadius:2}}>
-                  <div style={{fontSize:9,color:c,letterSpacing:1.5,marginBottom:6}}>{h}</div>
-                  <p style={{fontSize:10,color:"#3a5a70",margin:0,lineHeight:1.7}}>{b}</p>
+      return (
+        <svg width={width} height={H} className="block overflow-visible mx-auto my-4">
+          <line x1={dx} y1={AY - 14} x2={rimVisualX} y2={8} stroke="#f59e0b" strokeWidth={0.8} opacity={0.3}/>
+          <line x1={nx} y1={AY - 14} x2={rimVisualX} y2={8} stroke="#3b82f6" strokeWidth={0.8} opacity={0.3}/>
+          <circle cx={rimVisualX} cy={8} r={3} fill="none" stroke="#1e3050" strokeWidth={1}/>
+          
+          <line x1={lx - 5} y1={AY} x2={rx + 5} y2={AY} stroke="#1e3050" strokeWidth={2}/>
+          <rect x={nx} y={AY - 5} width={Math.max(dx - nx, 1)} height={10} fill="#0a1620" stroke="#1e3050" strokeWidth={1}/>
+          <rect x={nx - 4} y={AY - FH} width={8} height={FH * 2} fill="#3b82f6" rx={1}/>
+          <rect x={dx - 4} y={AY - FH} width={8} height={FH * 2} fill="#f59e0b" rx={1}/>
+
+          <line x1={nx} y1={AY + FH + 5} x2={rimVisualX} y2={AY + FH + 5} stroke="#3b82f6" strokeWidth={1}/>
+          <line x1={rimVisualX} y1={AY + FH + 5} x2={dx} y2={AY + FH + 5} stroke="#f59e0b" strokeWidth={1}/>
+          
+          <text x={(nx + rimVisualX) / 2} y={AY + FH + 17} textAnchor="middle" fill="#60a5fa" fontSize={9} fontFamily="monospace">NDS</text>
+          <text x={(rimVisualX + dx) / 2} y={AY + FH + 17} textAnchor="middle" fill="#fbbf24" fontSize={9} fontFamily="monospace">DS</text>
+        </svg>
+      );
+    }
+
+    function HubAnalysis() {
+      const [tab, setTab] = useState('geo');
+      const [wheelKey, setWheelKey] = useState('29"');
+      const [presetId, setPresetId] = useState('r148');
+      const [tDS, setTDS] = useState(115);
+      const [nSpokes, setNSpokes] = useState(32);
+      const [offsetRim, setOffsetRim] = useState(true);
+      const [rimType, setRimType] = useState('alloy');
+
+      const rimOffsetMm = offsetRim ? 3.0 : 0.0;
+      const nModes = 24;  // Fixed at 24 modes (standard for wheel analysis)
+      
+      const data = useMemo(() => PRESETS.map(p => {
+        const w = buildWheel({ preset: p, wheelKey, offsetRim, tDS, nSpokes, rimType });
+        const res = calcWheel(w, nModes);
+        return { ...p, d_ds_display: p.d_ds + rimOffsetMm, d_nds_display: p.d_nds - rimOffsetMm, ...res, isActive: p.id === presetId };
+      }), [wheelKey, offsetRim, tDS, nSpokes, presetId, rimType, rimOffsetMm]);
+
+      const m = data.find(d => d.id === presetId);
+
+      const tabBtn = (id, label) => (
+        <button key={id} onClick={()=>setTab(id)} className={`px-4 py-2 font-mono text-[10px] tracking-widest uppercase border-b-2 transition-colors ${tab===id ? 'text-blue-400 border-blue-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>
+          {label}
+        </button>
+      );
+
+      return (
+        <div className="bg-[#060d18] min-h-screen font-mono text-[#e2e8f0] text-xs">
+          
+          {/* Header */}
+          <div className="bg-gradient-to-b from-[#0b1e36] to-[#060d18] border-b border-[#1e3050] p-6">
+            <div className="text-[10px] text-blue-500 tracking-[0.25em] mb-1 uppercase">Hub Engineering Analysis</div>
+            <h1 className="text-xl font-light tracking-wide text-slate-100">WHEEL STRENGTH: RIGID vs ELASTIC FEA</h1>
+            <p className="text-[11px] text-[#4a6a8a] mt-1">24-mode matrix solver with variable rim material properties. Elastic analysis reveals localization effects.</p>
+          </div>
+
+          {/* Control Panel */}
+          <div className="bg-[#080f1a] border-b border-[#1e3050] p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 items-start">
+              
+              <div className="lg:col-span-1">
+                <label className="block text-[9px] text-[#2d4a6a] tracking-widest mb-2">HUB PRESET</label>
+                <select value={presetId} onChange={e=>setPresetId(e.target.value)} className="w-full bg-[#0a1620] text-blue-400 p-2 border border-[#1e3050] cursor-pointer rounded">
+                  {PRESETS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              <div className="lg:col-span-1">
+                <label className="block text-[9px] text-[#2d4a6a] tracking-widest mb-2">WHEEL SIZE</label>
+                <div className="flex gap-2">
+                  {Object.entries(WHEEL_SIZES).map(([k]) => (
+                    <button key={k} onClick={()=>setWheelKey(k)} className={`px-3 py-1 border rounded text-[11px] ${wheelKey===k ? 'bg-blue-900 border-blue-500 text-blue-300' : 'bg-[#0a1620] border-[#1e3050] text-[#4a6a8a]'}`}>{k}</button>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div className="lg:col-span-1">
+                <label className="block text-[9px] text-[#2d4a6a] tracking-widest mb-2">RIM MATERIAL</label>
+                <select value={rimType} onChange={e=>setRimType(e.target.value)} className="w-full bg-[#0a1620] text-green-400 p-2 border border-[#1e3050] cursor-pointer rounded text-[11px]">
+                  {Object.entries(RIM_SPECS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+                </select>
+              </div>
+
+              <div className="lg:col-span-1">
+                <label className="block text-[9px] text-[#2d4a6a] tracking-widest mb-2">3MM OFFSET RIM</label>
+                <button onClick={() => setOffsetRim(!offsetRim)} className={`w-full px-3 py-1 border rounded text-[11px] ${offsetRim ? 'bg-green-900 border-green-500 text-green-300' : 'bg-[#0a1620] border-[#1e3050] text-[#4a6a8a]'}`}>
+                  {offsetRim ? '✓ ENABLED' : 'DISABLED'}
+                </button>
+              </div>
+
+              <div className="lg:col-span-1">
+                <Slider label="DS TENSION" value={tDS} min={80} max={140} step={1} unit=" kgf" color="#f59e0b" onChange={setTDS} />
+              </div>
+
+              <div className="lg:col-span-1">
+                <Slider label="SPOKE COUNT" value={nSpokes} min={24} max={36} step={2} unit="H" color="#a78bfa" onChange={setNSpokes} />
+              </div>
             </div>
           </div>
-        )}
 
-        {tab==="tension" && (
-          <div>
-            <SHdr n="02" title="SPOKE TENSION SYMMETRY" sub="NDS/DS % for rear. L/R % for front. 100% = perfect balance. Rear target >= 80%. Front values >100% = disc accommodation (expected)."/>
-            <div style={{display:"flex",height:8,borderRadius:2,overflow:"hidden",marginBottom:4,border:"1px solid #1a3050"}}>
-              {["#ef4444","#f97316","#eab308","#84cc16","#22c55e"].map(c=><div key={c} style={{flex:1,background:c}}/>)}
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#253a50",marginBottom:18}}>
-              <span>50% critical</span><span>60%</span><span>70%</span><span>80% target</span><span>90%</span><span>100% ideal</span>
-            </div>
-            <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"18px",borderRadius:2,marginBottom:14}}>
-              {HUBS.map(h=>{
-                const rc=rCol(h.ratio,h.type);
-                return (
-                  <div key={h.id} style={{marginBottom:11}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{fontSize:10,color:"#5a80a0",width:130,flexShrink:0}}>{h.short}</span>
-                      <span style={{fontSize:9,color:"#253a50",flex:1}}>{h.type==="rear"?`NDS = ${h.ratio}% of DS`:`Left (disc) = ${h.ratio}% of Right`}</span>
-                      <span style={{fontSize:11,color:rc,fontWeight:"bold",width:52,textAlign:"right"}}>{h.ratio}%</span>
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-[#1e3050] bg-[#080f1a] px-4">
+            {tabBtn('geo', '01 Geometry')}
+            {tabBtn('strength', '02 Strength Analysis')}
+            {tabBtn('table', '03 Data Table')}
+          </div>
+
+          {/* Main Content Area */}
+          <div className="max-w-7xl mx-auto p-6">
+            
+            {tab === 'geo' && m && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-[#0b1826] border border-[#1e3050] rounded p-5">
+                  <div className="text-[10px] text-blue-500 tracking-widest mb-4 uppercase">Live Wheel Geometry</div>
+                  <CrossSection hub_d_ds={m.d_ds} hub_d_nds={m.d_nds} rimOffsetMm={rimOffsetMm} />
+                  <div className="grid grid-cols-3 gap-3 mt-4">
+                    <MetricCard label="SPOKE TENSION SYMMETRY" value={m.symmetry_pct} unit="%" color={symCol(m.symmetry_pct)} />
+                    <MetricCard label="FLANGE SPAN" value={m.ftf} unit="mm" color="#38bdf8" />
+                    <MetricCard label="NDS TENSION" value={m.t_nds} unit="kgf" color="#a78bfa" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <MetricCard label="β DS BRACING" value={m.beta_ds} unit="deg" color="#f59e0b" />
+                    <MetricCard label="β NDS BRACING" value={m.beta_nds} unit="deg" color="#60a5fa" />
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="bg-[#0b1826] border border-[#3b82f6] rounded p-5">
+                    <div className="text-[10px] text-blue-400 tracking-widest mb-2 uppercase">Spoke Geometry Note</div>
+                    <p className="text-[11px] text-[#4a6a8a] leading-relaxed">
+                      β (bracing angle) measures the angle of the spoke relative to rim radial direction. Wider flanges (157mm Superboost) create steeper bracing angles compared to 142mm ISO standard.
+                    </p>
+                  </div>
+                  <div className="bg-[#0b1826] border border-[#10b981] rounded p-5">
+                    <div className="text-[10px] text-green-400 tracking-widest mb-2 uppercase">Rim Material Impact</div>
+                    <p className="text-[11px] text-[#4a6a8a] leading-relaxed">
+                      {RIM_SPECS[rimType].name} has Young's modulus of {(RIM_SPECS[rimType].E / 1e9).toFixed(0)} GPa. Stiffer rims distribute loads more evenly; flexible rims localize deformation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'strength' && m && (
+              <div className="space-y-6">
+                <div className="bg-[#0b1826] border border-[#1e3050] rounded p-5">
+                  <div className="text-[10px] text-green-500 tracking-widest mb-4 uppercase">FEA Reality vs Rigid Theory</div>
+                  <p className="text-[11px] text-[#4a6a8a] mb-6 max-w-4xl leading-relaxed">
+                    Marketing claims ~20% lateral strength gains for Superboost (157mm) over ISO 142mm based on <strong>rigid rim theory</strong>. However, FEA reveals that wider bracing creates a stiffer spoke foundation. Against elastic alloy rims, impacts <strong>highly localize</strong> on fewer spokes, negating the theoretical gain. Try switching rim materials above to see how this changes!
+                  </p>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <MetricCard label="LATERAL STIFFNESS" value={m.K_lat} unit="N/mm" color="#38bdf8" sub="Mode Matrix" />
+                    <MetricCard label="RADIAL STIFFNESS" value={m.K_rad} unit="N/mm" color="#4ade80" sub="Mode Matrix" />
+                    <MetricCard label="FEA LATERAL STRENGTH" value={m.F_lat_elastic} unit="kgf" color="#f59e0b" sub="{rimType === 'alloy' ? 'Localized' : 'Distributed'}" />
+                    <MetricCard label="RIGID THEORY LATERAL" value={m.F_lat_rigid} unit="kgf" color="#94a3b8" sub="Baseline" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-[#080f1a] border border-[#1e3050] rounded p-4">
+                      <div className="text-[10px] text-[#f59e0b] tracking-widest mb-4 uppercase text-center">Lateral Strength Comparison (kgf)</div>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={data} margin={{top:10,right:10,bottom:20,left:0}}>
+                          <CartesianGrid strokeDasharray="3,3" stroke="#1e3050" vertical={false}/>
+                          <XAxis dataKey="short" tick={{fill:'#4a6a8a',fontSize:10}} />
+                          <YAxis tick={{fill:'#4a6a8a',fontSize:10}} />
+                          <Tooltip content={<ChartTip/>} />
+                          <Legend wrapperStyle={{fontSize: '11px', color: '#4a6a8a'}} />
+                          <Bar dataKey="F_lat_rigid" name="Rigid Theory" fill="#3d5a80" radius={[2,2,0,0]} />
+                          <Bar dataKey="F_lat_elastic" name="FEA Reality" fill="#f59e0b" radius={[2,2,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
-                    <div style={{display:"flex",gap:5,alignItems:"center"}}>
-                      <div style={{flex:1,background:"#060d18",height:13,borderRadius:1,position:"relative",border:"1px solid #0f1826"}}>
-                        <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${Math.min(h.ratio,100)}%`,background:rc,opacity:0.85,borderRadius:1}}/>
-                        <div style={{position:"absolute",left:"80%",top:0,bottom:0,width:1,background:"#1a3050"}}/>
-                      </div>
-                      <span style={{fontSize:8,color:"#1a3050",width:16}}>|80</span>
+                    <div className="bg-[#080f1a] border border-[#1e3050] rounded p-4">
+                      <div className="text-[10px] text-[#a78bfa] tracking-widest mb-4 uppercase text-center">Radial Strength (kgf)</div>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={data} margin={{top:10,right:10,bottom:20,left:0}}>
+                          <CartesianGrid strokeDasharray="3,3" stroke="#1e3050" vertical={false}/>
+                          <XAxis dataKey="short" tick={{fill:'#4a6a8a',fontSize:10}} />
+                          <YAxis tick={{fill:'#4a6a8a',fontSize:10}} />
+                          <Tooltip content={<ChartTip/>} />
+                          <Bar dataKey="F_rad_elastic" name="FEA Radial" fill="#a78bfa" radius={[2,2,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              {[["#3b82f6","WHY TENSION IMBALANCE MATTERS","Wheel strength scales with NDS tension, not DS. The NDS bottom spoke always buckles first. At 51.6% balance (135/142), NDS = 51.6 kgf and radial failure = 111 kgf. At 91.1% (197x12), failure = 196 kgf. A 77% strength gain from axle width alone at identical DS tension."],
-                ["#f59e0b","THE GEOMETRY EXPLANATION","Equilibrium: T_DS x sin(B_DS) = T_NDS x sin(B_NDS). On a 148 hub, DS is only 22.7mm from centre (shallow angle) while NDS is 35.8mm (steeper). Steeper NDS spokes need proportionally less tension to balance — so NDS is always the weak link. Only wider axles fix this."]
-              ].map(([c,h,b])=>(
-                <div key={h} style={{background:"#0b1826",border:"1px solid #1a3050",padding:"12px 16px",borderRadius:2}}>
-                  <div style={{fontSize:9,color:c,letterSpacing:1.5,marginBottom:7}}>{h}</div>
-                  <p style={{fontSize:10,color:"#3a5a70",margin:0,lineHeight:1.8}}>{b}</p>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {tab==="strength" && (
-          <div>
-            <SHdr n="03" title="WHEEL STRENGTH COMPARISON" sub="Mode Matrix (Ford et al. 2016). Failure = bottom spoke reaches 0 kgf. 75 kg rider: ~35-40 kgf static rear. Dynamic impacts multiply 3-5x."/>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-              <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"16px",borderRadius:2}}>
-                <div style={{fontSize:9,color:"#a78bfa",letterSpacing:2,marginBottom:12}}>F_RAD — RADIAL STRENGTH (kgf) — Primary failure mode</div>
-                <ResponsiveContainer width="100%" height={230}>
-                  <BarChart data={sData} margin={{top:4,right:8,bottom:44,left:0}}>
-                    <CartesianGrid strokeDasharray="3,3" stroke="#0f1826"/>
-                    <XAxis dataKey="name" tick={{fill:"#3a5a70",fontSize:9}} angle={-40} textAnchor="end" interval={0}/>
-                    <YAxis tick={{fill:"#3a5a70",fontSize:9}} domain={[0,250]}/>
-                    <Tooltip content={<Tip/>}/>
-                    <ReferenceLine y={38}  stroke="#1a3050" strokeDasharray="4,3" label={{value:"Static ~38kgf",fill:"#253a50",fontSize:8,position:"insideTopRight"}}/>
-                    <ReferenceLine y={120} stroke="#1a3050" strokeDasharray="4,3" label={{value:"Heavy 120kgf",fill:"#253a50",fontSize:8,position:"insideTopRight"}}/>
-                    <Bar dataKey="Frad kgf" name="F_rad (kgf)" radius={[2,2,0,0]}>
-                      {sData.map((d,i)=><Cell key={i} fill={grad(d["Frad kgf"],216)} opacity={0.85}/>)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+            {tab === 'table' && (
+              <div className="bg-[#0b1826] border border-[#1e3050] rounded p-2 overflow-x-auto">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#1e3050] text-[#5a80a0]">
+                      <th className="p-3">Hub Standard</th>
+                      <th className="p-3">Eff. d_DS (mm)</th>
+                      <th className="p-3">Eff. d_NDS (mm)</th>
+                      <th className="p-3">Symmetry</th>
+                      <th className="p-3">K_lat (N/mm)</th>
+                      <th className="p-3">F_lat (Elastic)</th>
+                      <th className="p-3">F_lat (Rigid)</th>
+                      <th className="p-3">Discrepancy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.map(h => {
+                      const discrepancy = (((h.F_lat_rigid - h.F_lat_elastic) / (h.F_lat_rigid + 1e-12)) * 100).toFixed(0);
+                      return (
+                        <tr key={h.id} className={`border-b border-[#1e3050] ${h.isActive ? 'bg-[#0d1e33]' : 'bg-transparent hover:bg-[#0a1620]'}`}>
+                          <td className={`p-3 ${h.isActive ? 'font-bold' : ''}`}>{h.name}</td>
+                          <td className="p-3 text-[#f59e0b]">{h.d_ds_display.toFixed(1)}</td>
+                          <td className="p-3 text-[#60a5fa]">{h.d_nds_display.toFixed(1)}</td>
+                          <td className="p-3 font-bold" style={{color: symCol(h.symmetry_pct)}}>{h.symmetry_pct}%</td>
+                          <td className="p-3 text-[#38bdf8]">{h.K_lat}</td>
+                          <td className="p-3 text-[#f59e0b]">{h.F_lat_elastic} kgf</td>
+                          <td className="p-3 text-[#94a3b8]">{h.F_lat_rigid} kgf</td>
+                          <td className="p-3 text-red-400 font-mono">−{discrepancy}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"16px",borderRadius:2}}>
-                <div style={{fontSize:9,color:"#f59e0b",letterSpacing:2,marginBottom:12}}>F_LAT — LATERAL STRENGTH (kgf) — Sideways impact</div>
-                <ResponsiveContainer width="100%" height={230}>
-                  <BarChart data={sData} margin={{top:4,right:8,bottom:44,left:0}}>
-                    <CartesianGrid strokeDasharray="3,3" stroke="#0f1826"/>
-                    <XAxis dataKey="name" tick={{fill:"#3a5a70",fontSize:9}} angle={-40} textAnchor="end" interval={0}/>
-                    <YAxis tick={{fill:"#3a5a70",fontSize:9}} domain={[0,80]}/>
-                    <Tooltip content={<Tip/>}/>
-                    <ReferenceLine y={15} stroke="#1a3050" strokeDasharray="4,3" label={{value:"Cornering 15kgf",fill:"#253a50",fontSize:8,position:"insideTopRight"}}/>
-                    <Bar dataKey="Flat kgf" name="F_lat (kgf)" radius={[2,2,0,0]}>
-                      {sData.map((d,i)=><Cell key={i} fill={grad(d["Flat kgf"],64)} opacity={0.85}/>)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"16px",borderRadius:2,marginBottom:12}}>
-              <div style={{fontSize:9,color:"#38bdf8",letterSpacing:2,marginBottom:12}}>K_LAT — LATERAL STIFFNESS (N/mm)</div>
-              <ResponsiveContainer width="100%" height={130}>
-                <BarChart data={sData} margin={{top:4,right:8,bottom:4,left:0}}>
-                  <CartesianGrid strokeDasharray="3,3" stroke="#0f1826"/>
-                  <XAxis dataKey="name" tick={{fill:"#3a5a70",fontSize:9}}/>
-                  <YAxis tick={{fill:"#3a5a70",fontSize:9}} domain={[0,260]}/>
-                  <Tooltip content={<Tip/>}/>
-                  <Bar dataKey="Klat N/mm" name="K_lat (N/mm)" fill="#38bdf8" opacity={0.7} radius={[2,2,0,0]}/>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-              {[["#ef4444","RADIAL IS THE BINDING LIMIT","F_rad is 1.8-3x lower than F_lat across all hubs. A hard pothole or landing buckles a spoke before a typical sideways hit of equal force. Optimise for radial first."],
-                ["#22c55e","AXLE WIDTH IS THE LEVER","135 to 157mm adds +57% radial strength (111 to 175 kgf) purely from better tension balance. 197mm reaches 196 kgf — near front-hub territory."],
-                ["#3b82f6","FRONT vs REAR","Front hubs achieve 215+ kgf regardless of width. The cassette forces a rear structural compromise only wider axle standards can meaningfully mitigate."]
-              ].map(([c,h,b])=>(
-                <div key={h} style={{background:"#0b1826",border:"1px solid #1a3050",padding:"12px 14px",borderRadius:2}}>
-                  <div style={{fontSize:9,color:c,letterSpacing:1.5,marginBottom:6}}>{h}</div>
-                  <p style={{fontSize:10,color:"#3a5a70",margin:0,lineHeight:1.7}}>{b}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+            )}
 
-        {tab==="table" && (
-          <div>
-            <SHdr n="04" title="FULL METRICS TABLE" sub="Mode Matrix Model · DS/Right reference = 100 kgf · DT Swiss TK540 29in · EIlat=50 EIrad=150 GJ=40 N·m2 · 32 spokes 3x 2.0mm steel"/>
-            <div style={{overflowX:"auto",marginBottom:20}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
-                <thead>
-                  <tr style={{borderBottom:"1px solid #1a3050"}}>
-                    {["Hub","OLD mm","Type","d_DS/R","d_NDS/L","PCD DS","PCD NDS","Ratio %","K_lat N/mm","F_lat kgf","F_rad kgf","F-to-F mm"].map(h=>(
-                      <th key={h} style={{padding:"8px 10px",textAlign:"left",color:"#253a50",fontSize:8,fontWeight:"normal",letterSpacing:1,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {HUBS.map((h,i)=>{
-                    const rc=rCol(h.ratio,h.type);
-                    return (
-                      <tr key={h.id} style={{background:i%2===0?"#060d18":"#0a1422",borderBottom:"1px solid #0f1826"}}>
-                        <td style={{padding:"8px 10px",color:"#5a80a0"}}>{h.name}</td>
-                        <td style={{padding:"8px 10px",color:"#3a5a70"}}>{h.OLD}</td>
-                        <td style={{padding:"8px 10px",color:h.type==="rear"?"#f59e0b":"#3b82f6",textTransform:"uppercase",fontSize:9}}>{h.type}</td>
-                        <td style={{padding:"8px 10px",color:"#fbbf24"}}>{h.d_ds}</td>
-                        <td style={{padding:"8px 10px",color:"#60a5fa"}}>{h.d_nds}</td>
-                        <td style={{padding:"8px 10px",color:"#3a5a70"}}>{h.pcd_ds}</td>
-                        <td style={{padding:"8px 10px",color:"#3a5a70"}}>{h.pcd_nds}</td>
-                        <td style={{padding:"8px 10px",color:rc,fontWeight:"bold"}}>{h.ratio}%</td>
-                        <td style={{padding:"8px 10px",color:"#38bdf8"}}>{h.K_lat}</td>
-                        <td style={{padding:"8px 10px",color:"#f59e0b"}}>{(h.F_lat/9.81).toFixed(1)}</td>
-                        <td style={{padding:"8px 10px",color:"#a78bfa"}}>{(h.F_rad/9.81).toFixed(1)}</td>
-                        <td style={{padding:"8px 10px",color:"#3a5a70"}}>{(h.d_ds+h.d_nds).toFixed(1)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div style={{background:"#0b1826",border:"1px solid #1a3050",padding:"14px 18px",borderRadius:2}}>
-              <div style={{fontSize:9,color:"#253a50",letterSpacing:2,marginBottom:10}}>COLUMN DEFINITIONS</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 24px"}}>
-                {[["OLD","Over-Locknut Distance — total axle width (mm)"],["d_DS / d_R","Center-to-flange, drive/right side (mm)"],["d_NDS / d_L","Center-to-flange, non-drive/left side (mm)"],["PCD","Pitch circle diameter of spoke holes on each flange (mm)"],["Ratio %","NDS/DS tension (rear) or L/R (front). Higher = better balance."],["K_lat","Lateral stiffness at contact patch — Mode Matrix (N/mm)"],["F_lat","Min lateral force for weak-side spoke to reach 0 kgf"],["F_rad","Min radial force for weak-side spoke to reach 0 kgf — Ford primary strength metric"],["F-to-F","Flange-to-flange span = d_DS + d_NDS (mm)"]].map(([k,v])=>(
-                  <div key={k} style={{display:"flex",gap:8,fontSize:9}}>
-                    <span style={{color:"#60a5fa",width:88,flexShrink:0}}>{k}</span>
-                    <span style={{color:"#253a50",lineHeight:1.6}}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{marginTop:28,borderTop:"1px solid #0f1826",paddingTop:12,fontSize:8,color:"#1a3050",lineHeight:2}}>
-              Ford (2018) Reinventing the Wheel — Northwestern U. | Ford, Papadopoulos &amp; Balogun (2016) Buckling of the Bicycle Wheel | Ford, Peng &amp; Balogun (2018) Acoustic Modal Testing of Bicycle Rims
+            <div className="mt-12 border-t border-[#1e3050] pt-6 text-[10px] text-[#2d4a6a] space-y-2">
+              <p><strong>Methodology:</strong> 24-mode Rayleigh-Ritz FEA via mode matrix with full elastic rim+spoke coupling. Stiffness computed by applying 1 N test force and inverting global matrix (196×196 DOF).</p>
+              <p><strong>Detension Force:</strong> For each spoke, F = T / |dT/dF| where dT/dF is the rate of tension change per Newton of applied force. Minimum across all spokes determines wheel detension limit.</p>
+              <p><strong>Rigid Theory:</strong> Baseline assumes infinitely stiff rim. Used for marketing comparisons. Shows why real elastic rims behave differently.</p>
+              <p><strong>Rim Materials:</strong> Alloy (69 GPa), Carbon (120 GPa), DH (heavier alloy). Material properties affect modal stiffness and localization effects.</p>
             </div>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<HubAnalysis />);
+  </script>
+</body>
+</html>
