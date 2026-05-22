@@ -111,15 +111,9 @@
         this.EA = Math.PI / 4 * diameter * diameter * young_mod;
         this.tension = 0;
 
-        // rim_pt = [R, theta, z_offset]
-        // hub_pt = [r_hub, theta_hub, z_hub]
         this.rim_pt = rim_pt;
         this.hub_pt = hub_pt;
 
-        // Calculate spoke vector in 3D Cartesian space
-        // du = axial (z direction)
-        // dv = radial direction (net radial displacement)
-        // dw = tangential (azimuthal)
         const du = hub_pt[2] - rim_pt[2];
         const dv = (rim_pt[0] - hub_pt[0]) +
                    hub_pt[0] * (1 - Math.cos(hub_pt[1] - rim_pt[1]));
@@ -127,22 +121,17 @@
 
         this.length = Math.sqrt(du * du + dv * dv + dw * dw);
 
-        // Unit spoke vector
         this.n = [du / this.length, dv / this.length, dw / this.length];
 
-        // Direction cosines (for convenience)
-        this.cos_alpha = du / this.length;    // axial
-        this.cos_beta = dv / this.length;     // radial
-        this.cos_gamma = dw / this.length;    // tangential
+        this.cos_alpha = du / this.length;
+        this.cos_beta = dv / this.length;
+        this.cos_gamma = dw / this.length;
       }
 
       calc_k(tension = true) {
-        // Calculate stiffness matrix of individual spoke
-        // Returns 3x3 for force [u, v, w] where u=axial, v=radial, w=tangential
         const K_e = this.EA / this.length;
         const K_t = tension ? this.tension / this.length : 0;
 
-        // Elastic stiffness: K_e * n ⊗ n
         const K_elastic = outer(this.n, this.n);
         for (let i = 0; i < 3; i++) {
           for (let j = 0; j < 3; j++) {
@@ -150,7 +139,6 @@
           }
         }
 
-        // Geometric (tension) stiffness: K_t * (I - n ⊗ n)
         const I = eye(3);
         const nn = outer(this.n, this.n);
         const K_geom = [];
@@ -161,7 +149,6 @@
           }
         }
 
-        // Combined
         const K = [];
         for (let i = 0; i < 3; i++) {
           K[i] = [];
@@ -182,7 +169,6 @@
         this.n_modes = 24;
       }
 
-      // Assemble rim material (elastic) stiffness matrix for mode n
       K_rim_mode_elastic(n) {
         const w = this.wheel;
         const R = w.rim.radius;
@@ -191,22 +177,18 @@
         const GJ = w.rim.shear_mod * w.rim.J_tor;
 
         if (n === 0) {
-          // Zero mode: only radial and torsional freedom
           return [
-            [0, 0],  // radial [v, w]
+            [0, 0],
             [0, 0]
           ];
         }
 
-        // Higher modes (n >= 1): coupled radial-tangential
         const n2 = n * n;
         const n4 = n2 * n2;
 
-        // Radial bending + axial coupling
         const k_vv = EI_rad * Math.PI / Math.pow(R, 3) * n4;
         const k_vw = -EI_rad * Math.PI / Math.pow(R, 3) * n * n2;
 
-        // Tangential bending (includes torsion)
         const k_ww = EI_rad * Math.PI / Math.pow(R, 3) * n2 +
                      GJ * Math.PI / Math.pow(R, 3) * n2;
 
@@ -216,11 +198,7 @@
         ];
       }
 
-      // Assemble spoke contribution to stiffness for mode n
       K_spoke_mode_elastic(n) {
-        // For each spoke at angular position theta_i, sum contributions
-        // Using smeared spoke approximation: average over all spokes
-
         const w = this.wheel;
         const R = w.rim.radius;
         const sum_k = [
@@ -229,27 +207,20 @@
         ];
 
         for (const spoke of w.spokes) {
-          // Spoke stiffness in 3D
-          const K_s = spoke.calc_k(false);  // tension=false for material stiffness
+          const K_s = spoke.calc_k(false);
 
-          // Project to radial-tangential components
-          // For mode n: contributions scale with cos(n*theta), sin(n*theta)
           const theta = spoke.rim_pt[1];
           const c = Math.cos(n * theta);
           const s = Math.sin(n * theta);
 
-          // Effective projection of spoke stiffness to radial-tangential plane
-          // K_spoke projects via: v = cos_beta, w = cos_gamma
-          const beta = spoke.cos_beta;   // radial direction cosine
-          const gamma = spoke.cos_gamma;  // tangential direction cosine
+          const beta = spoke.cos_beta;
+          const gamma = spoke.cos_gamma;
 
-          // Spoke stiffness components in [radial, tangential]
           const k_vv = K_s[1][1] * beta * beta + K_s[2][2] * gamma * gamma;
           const k_vw = K_s[1][2] * beta * gamma + K_s[2][1] * gamma * beta;
           const k_ww = K_s[2][2] * gamma * gamma + K_s[1][1] * beta * beta;
 
-          // Add weighted contribution
-          const weight = 1.0 / (2 * Math.PI * R);  // smeared spoke approximation
+          const weight = 1.0 / (2 * Math.PI * R);
           sum_k[0][0] += weight * k_vv;
           sum_k[0][1] += weight * k_vw;
           sum_k[1][0] += weight * k_vw;
@@ -259,7 +230,6 @@
         return sum_k;
       }
 
-      // Assemble geometric (tension-dependent) stiffness for mode n
       K_spoke_mode_geometric(n) {
         const w = this.wheel;
         const R = w.rim.radius;
@@ -269,12 +239,11 @@
         ];
 
         for (const spoke of w.spokes) {
-          const K_g = spoke.calc_k(true);  // tension=true for geometric stiffness
+          const K_g = spoke.calc_k(true);
 
           const beta = spoke.cos_beta;
           const gamma = spoke.cos_gamma;
 
-          // Geometric components
           const k_vv_g = K_g[1][1];
           const k_vw_g = K_g[1][2];
           const k_ww_g = K_g[2][2];
@@ -289,13 +258,11 @@
         return sum_k_geom;
       }
 
-      // Calculate modal stiffness: K_total(n) = K_rim(n) + K_spoke_elastic(n) - T_avg * K_spoke_geometric(n)
       calc_modal_stiffness(n, T_avg) {
         const K_rim = this.K_rim_mode_elastic(n);
         const K_spoke_e = this.K_spoke_mode_elastic(n);
         const K_spoke_g = this.K_spoke_mode_geometric(n);
 
-        // K_total = K_rim + K_spoke_e - T_avg * K_spoke_g
         const K = [];
         for (let i = 0; i < 2; i++) {
           K[i] = [];
@@ -307,15 +274,12 @@
         return K;
       }
 
-      // Modal compliance (inverse stiffness) for each mode
-      // For lateral and radial stiffness calculations
       calc_modal_compliance(n, T_avg) {
         const K = this.calc_modal_stiffness(n, T_avg);
         try {
           const C = matinv(K);
           return C;
         } catch (e) {
-          // Singular matrix (unbuckled mode)
           return [[1e16, 0], [0, 1e16]];
         }
       }
@@ -323,7 +287,6 @@
 
     // ── MAIN WHEEL CALCULATION ENGINE ────────────────────────────────────
     function calcWheel({ d_ds, d_nds, pcd_ds, pcd_nds, erd_mm, t_ds, n_spokes }) {
-      // Material properties
       const E_spoke = 210e9;
       const d_spoke = 2.0e-3;
       const A_spoke = Math.PI * Math.pow(d_spoke / 2, 2);
@@ -334,26 +297,22 @@
       const I_rad = 3000e-12;
       const J_tor = 500e-12;
 
-      const R = erd_mm / 2 / 1000;  // rim radius in meters
-      const N_sides = n_spokes / 2;   // spokes per side
+      const R = erd_mm / 2 / 1000;
+      const N_sides = n_spokes / 2;
 
-      // Hub geometry
       const r_hub_ds = pcd_ds / 2 / 1000;
       const r_hub_nds = pcd_nds / 2 / 1000;
       const width_ds = d_ds / 1000;
       const width_nds = d_nds / 1000;
 
-      // Cross-lacing angle (3-cross)
       const n_cross = 3;
       const theta_cross = (n_cross * 4 * Math.PI) / n_spokes;
 
-      // ── BUILD WHEEL GEOMETRY (Alternating DS/NDS spokes) ───────────────
       const spokes = [];
 
-      // Drive-side spokes
       for (let i = 0; i < N_sides; i++) {
         const theta_rim = 2 * Math.PI * (i / N_sides);
-        const s_dir = 2 * ((i + 1) % 2) - 1;  // alternating +1, -1
+        const s_dir = 2 * ((i + 1) % 2) - 1;
 
         const rim_pt = [R, theta_rim, -width_ds];
         const hub_pt = [r_hub_ds, theta_rim + theta_cross * s_dir, -width_ds];
@@ -361,7 +320,6 @@
         spokes.push(new Spoke(rim_pt, hub_pt, d_spoke, E_spoke));
       }
 
-      // Non-drive-side spokes
       for (let i = 0; i < N_sides; i++) {
         const theta_rim = 2 * Math.PI * (i / N_sides + 0.5);
         const s_dir = 2 * ((i + 1) % 2) - 1;
@@ -372,30 +330,23 @@
         spokes.push(new Spoke(rim_pt, hub_pt, d_spoke, E_spoke));
       }
 
-      // ── CALCULATE SPOKE LENGTHS AND GEOMETRY ─────────────────────────────
       const L_ds_avg = spokes.slice(0, N_sides).reduce((sum, s) => sum + s.length, 0) / N_sides;
       const L_nds_avg = spokes.slice(N_sides).reduce((sum, s) => sum + s.length, 0) / N_sides;
 
-      // Direction cosines for symmetry calculation
       const spoke_ds = spokes[0];
       const spoke_nds = spokes[N_sides];
 
-      // ── TENSION BALANCE (Vector projection method) ─────────────────────
-      // Calculate radial component magnitude for each side
       const n_ds_radial = spoke_ds.cos_beta;
       const n_nds_radial = spoke_nds.cos_beta;
 
-      // Projection formula from reference (apply_tension in bicycle_wheel.py)
       const T_d = Math.abs(n_ds_radial * spoke_nds.cos_gamma) +
                   Math.abs(n_nds_radial * spoke_ds.cos_gamma);
 
       const T_ds_N = t_ds * 9.81;
       const T_nds_N = T_ds_N * (Math.abs(n_ds_radial) / Math.abs(n_nds_radial));
 
-      // Average tension for modal analysis
-      const T_avg = (T_ds_N + T_nds_N) / 2 / 9.81;  // convert back to kgf
+      const T_avg = (T_ds_N + T_nds_N) / 2 / 9.81;
 
-      // ── APPLY TENSION TO ALL SPOKES ──────────────────────────────────────
       for (let i = 0; i < N_sides; i++) {
         spokes[i].tension = T_ds_N;
       }
@@ -403,7 +354,6 @@
         spokes[i].tension = T_nds_N;
       }
 
-      // Create wheel object for modal analysis
       const wheel = {
         spokes: spokes,
         rim: {
@@ -416,19 +366,14 @@
         }
       };
 
-      // ── MODAL ANALYSIS ───────────────────────────────────────────────────
       const mm = new ModalMatrix(wheel);
 
-      // Calculate stiffness contributions for each mode
-      let K_lat_total = 0;   // lateral stiffness (mode 0)
-      let K_rad_total = 0;   // radial stiffness (accumulated from modes)
+      let K_lat_total = 0;
+      let K_rad_total = 0;
 
-      // Mode 0 (zero mode): rigid body + spoke stiffness
-      // For lateral: K_lat = sum of spoke lateral components
       const K_spoke_0 = mm.K_spoke_mode_elastic(0);
       K_lat_total = 2 * Math.PI * R * (K_spoke_0[0][0] || 1e-10);
 
-      // Radial stiffness: sum over modes n=1 to N_max
       const N_max = 24;
       const compliances_rad = [];
 
@@ -437,7 +382,6 @@
         compliances_rad[n] = C_n;
       }
 
-      // Radial compliance = sum of individual modal compliances
       let compliance_rad_inv = 0;
       for (let n = 1; n <= N_max; n++) {
         const C_n = compliances_rad[n];
@@ -448,30 +392,22 @@
 
       K_rad_total = (N_sides / (2 * Math.PI * R)) * compliance_rad_inv;
 
-      // ── DETENSION FORCES (Spoke slack analysis) ──────────────────────────
-      // Force needed to detension NDS (driven by DS lateral impact)
-      // F_lat = tension / (compliance * leverage)
-      const C_rad_eff = 1.0 / K_rad_total;  // effective radial compliance
+      const C_rad_eff = 1.0 / K_rad_total;
 
-      // Lateral detension: force to slacken one side
       const F_lat_nds_N = T_nds_N * K_rad_total / (Math.abs(n_nds_radial) + 1e-10);
       const F_lat_ds_N = T_ds_N * K_rad_total / (Math.abs(n_ds_radial) + 1e-10);
       const F_lat_N = Math.min(F_lat_nds_N, F_lat_ds_N);
 
-      // Radial detension: similar analysis for radial impacts
       const F_rad_nds_N = T_nds_N * K_rad_total / (Math.abs(n_nds_radial) * Math.abs(n_nds_radial) + 1e-10);
       const F_rad_ds_N = T_ds_N * K_rad_total / (Math.abs(n_ds_radial) * Math.abs(n_ds_radial) + 1e-10);
       const F_rad_N = Math.min(F_rad_nds_N, F_rad_ds_N);
 
-      // Clamp to reasonable values
       const F_lat_kgf = Math.max(10, Math.min(200, F_lat_N / 9.81));
       const F_rad_kgf = Math.max(10, Math.min(200, F_rad_N / 9.81));
 
-      // ── SYMMETRY METRICS ──────────────────────────────────────────────────
       const ratio = T_nds_N / T_ds_N;
       const symmetry = ratio > 1 ? 1 / ratio : ratio;
 
-      // ── OUTPUT METRICS ────────────────────────────────────────────────────
       return {
         ratio_pct: +(ratio * 100).toFixed(1),
         symmetry_pct: +(symmetry * 100).toFixed(1),
@@ -543,7 +479,8 @@
             <line x1={lx} y1={AY - FH - 13} x2={lx} y2={AY - FH - 7} stroke="#1e3050" strokeWidth={1}/>
             <line x1={rx} y1={AY - FH - 13} x2={rx} y2={AY - FH - 7} stroke="#1e3050" strokeWidth={1}/>
             <text x={CX} y={AY - FH - 12} textAnchor="middle" fill="#2d4a6a" fontSize={compact ? 7 : 8} fontFamily="monospace">OLD {OLD}mm</text>
-          </>}
+          </>
+          }
           <line x1={lx - 5} y1={AY} x2={rx + 5} y2={AY} stroke="#1e3050" strokeWidth={2}/>
           <rect x={nx} y={AY - 5} width={Math.max(dx - nx, 1)} height={10} fill="#0a1620" stroke="#1e3050" strokeWidth={1}/>
           <rect x={lx - 6} y={AY - 14} width={6} height={28} fill="#142030" rx={1}/>
@@ -553,7 +490,8 @@
           {!compact && <>
             <text x={nx} y={AY - FH - 4} textAnchor="middle" fill="#60a5fa" fontSize={7} fontFamily="monospace">⌀{pcd_nds}</text>
             <text x={dx} y={AY - FH - 4} textAnchor="middle" fill="#fbbf24" fontSize={7} fontFamily="monospace">⌀{pcd_ds}</text>
-          </>}
+          </>
+          }
           <line x1={CX} y1={AY - FH} x2={CX} y2={AY + FH + 18} stroke="#1e3050" strokeWidth={1} strokeDasharray="3,2"/>
           <line x1={nx} y1={AY + FH + 5} x2={rimVisualX} y2={AY + FH + 5} stroke="#3b82f6" strokeWidth={1}/>
           <line x1={nx} y1={AY + FH + 2} x2={nx} y2={AY + FH + 8} stroke="#3b82f6" strokeWidth={1}/>
